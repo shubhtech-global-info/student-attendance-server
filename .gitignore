@@ -1,0 +1,6 @@
+node_modules
+.env
+package-lock.json
+
+sendTestNotification.js
+attendanceappnotificatio-c1e55-firebase-adminsdk-fbsvc-b427722fe6.json
