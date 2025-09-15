@@ -7,6 +7,8 @@ const { successResponse, errorResponse } = require('../utils/response.utils');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { generateToken } = require('../config/jwt.config');
+const bcrypt = require('bcrypt');
+const { validatePassword } = require('../utils/validation');
 
 /**
  * @desc    Register FCM token for student
@@ -68,7 +70,6 @@ const removeFcmToken = async (req, res) => {
   }
 };
 
-
 /**
  * @desc    Student login
  * @route   POST /api/students/login
@@ -117,7 +118,6 @@ const loginStudent = async (req, res) => {
   }
 };
 
-
 /**
  * @desc    Bulk upload students from Excel
  * @route   POST /api/students/bulk-upload
@@ -160,13 +160,33 @@ const bulkUploadStudents = async (req, res) => {
       return errorResponse(res, 'All students in the file already exist', 400);
     }
 
-    // Default password
     const DEFAULT_PASSWORD = "password123";
+    const salt = await bcrypt.genSalt(10);
 
-    const studentsToInsert = newStudents.map(student => ({
-      ...student,
-      password: DEFAULT_PASSWORD,
-      createdBy: hodId
+    // ✅ Hash passwords before inserting, validate if provided
+    const studentsToInsert = await Promise.all(newStudents.map(async student => {
+      let plainPassword = student.password || DEFAULT_PASSWORD;
+
+      if (student.password) {
+        const passwordError = validatePassword(plainPassword);
+        if (passwordError) {
+          console.warn(`[bulkUploadStudents] Weak password for ${student.enrollmentNumber}: ${passwordError}`);
+          // Optionally, you can skip this student or proceed with default password
+          plainPassword = DEFAULT_PASSWORD;
+        }
+      }
+
+      const hashedPassword = await bcrypt.hash(plainPassword, salt);
+      return {
+        enrollmentNumber: student.enrollmentNumber,
+        name: student.name,
+        semester: student.semester,
+        division: student.division || null,
+        classIds: [],
+        fcmTokens: [],
+        password: hashedPassword,
+        createdBy: hodId
+      };
     }));
 
     const insertedStudents = await Student.insertMany(studentsToInsert);
@@ -182,7 +202,6 @@ const bulkUploadStudents = async (req, res) => {
     return errorResponse(res, 'Server error during bulk upload', 500);
   }
 };
-
 
 /**
  * @desc    Get all students
@@ -281,6 +300,14 @@ const updateStudent = async (req, res) => {
       student.enrollmentNumber = enrollmentNumber;
     }
 
+    if (password) {
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        return errorResponse(res, passwordError, 400);
+      }
+      student.password = password;
+    }
+
     if (classId) {
       let newClassIds = [];
       const ids = Array.isArray(classId) ? classId : [classId];
@@ -350,6 +377,10 @@ const updateOwnProfile = async (req, res) => {
     if (division !== undefined) student.division = division.trim();
 
     if (password) {
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        return errorResponse(res, passwordError, 400);
+      }
       const salt = await bcrypt.genSalt(10);
       student.password = await bcrypt.hash(password, salt);
     }
@@ -480,6 +511,12 @@ const addStudent = async (req, res) => {
 
     if (!enrollmentNumber || !name || !semester || !password) {
       return errorResponse(res, "Enrollment number, name, semester, and password are required", 400);
+    }
+
+    // ✅ Validate password strength
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return errorResponse(res, passwordError, 400);
     }
 
     // ✅ Check global uniqueness of enrollmentNumber
