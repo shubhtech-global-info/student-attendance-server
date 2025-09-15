@@ -171,24 +171,34 @@ const getClasses = async (req, res) => {
 };
 
 
-
 /**
  * @desc    Get class by ID
  * @route   GET /api/classes/:id
- * @access  Private (HOD only)
+ * @access  Private (Students, Professors, HOD)
  */
 const getClassById = async (req, res) => {
   try {
     const _id = req.params.id;
-    const hodId = req.user.id;
+    let classData;
 
-    // Find class by ID and created by this HOD
-    const classData = await Class.findOne({
-      _id,
-      createdBy: hodId
-    })
-      .populate('students', 'enrollmentNumber name semester')
-      .populate('professors', 'name username');
+    if (req.user.role === 'hod') {
+      // HOD: only see classes they created
+      classData = await Class.findOne({ _id, createdBy: req.user.id })
+        .populate('students', 'enrollmentNumber name semester')
+        .populate('professors', 'name username');
+    } else if (req.user.role === 'student') {
+      // Student: only see classes they belong to
+      classData = await Class.findOne({ _id, students: req.user.id })
+        .populate('students', 'enrollmentNumber name semester')
+        .populate('professors', 'name username');
+    } else if (req.user.role === 'professor') {
+      // Professor: only see classes they are assigned to
+      classData = await Class.findOne({ _id, professors: req.user.id })
+        .populate('students', 'enrollmentNumber name semester')
+        .populate('professors', 'name username');
+    } else {
+      return errorResponse(res, 'Unauthorized access', 403);
+    }
 
     if (!classData) {
       return errorResponse(res, 'Class not found', 404);
@@ -197,9 +207,12 @@ const getClassById = async (req, res) => {
     return successResponse(res, { class: classData });
 
   } catch (error) {
+    console.error('[getClassById]', error);
     return errorResponse(res, 'Server error while fetching class', 500);
   }
 };
+
+
 
 /**
  * @desc    Update class

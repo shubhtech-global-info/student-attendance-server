@@ -5,7 +5,7 @@ const { authenticate, authorizeHOD } = require('../middleware/auth.middleware');
 const { handleExcelUpload } = require('../middleware/upload.middleware');
 
 // Get class by ID
-router.get('/:id', classController.getClassById);
+router.get('/:id', authenticate, classController.getClassById);
 
 // All routes require HOD authentication
 router.use(authenticate, authorizeHOD);
