@@ -19,7 +19,7 @@ const allowHODorProfessor = (req, res, next) => {
 router.post('/login', validateStudentLogin, studentController.loginStudent);
 
 // student profile info
-router.get('/me', authorizeStudent, studentController.getStudentProfile );
+router.get('/me', authenticate, authorizeStudent, studentController.getStudentProfile );
 
 // ✅ Student can update their own profile
 router.put('/me', authenticate, authorizeStudent, studentController.updateOwnProfile);
