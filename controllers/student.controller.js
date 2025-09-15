@@ -533,6 +533,30 @@ const addStudent = async (req, res) => {
 };
 
 
+/**
+ * @desc    Get logged-in student details
+ * @route   GET /api/students/me
+ * @access  Student only
+ */
+const getStudentProfile = async (req, res) => {
+  try {
+    const studentId = req.student.id; // from auth middleware
+    const student = await Student.findById(studentId).select('-password'); // exclude password
+
+    if (!student) {
+      return errorResponse(res, 'Student not found', 404);
+    }
+
+    return successResponse(res, {
+      student
+    });
+  } catch (error) {
+    console.error('[getStudentProfile]', error);
+    return errorResponse(res, 'Server error while fetching profile', 500);
+  }
+};
+
+
 module.exports = {
   bulkUploadStudents,
   getStudents,
@@ -544,5 +568,6 @@ module.exports = {
   addStudent,
   loginStudent,
   registerFcmToken,
-  removeFcmToken
+  removeFcmToken,
+  getStudentProfile
 };
