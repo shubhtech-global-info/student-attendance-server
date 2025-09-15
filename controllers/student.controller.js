@@ -377,8 +377,7 @@ const updateOwnProfile = async (req, res) => {
       return errorResponse(res, passwordError, 400);
     }
 
-    const salt = await bcrypt.genSalt(10);
-    student.password = await bcrypt.hash(password, salt);
+    student.password = password;
 
     await student.save();
 
