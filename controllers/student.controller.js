@@ -7,7 +7,6 @@ const { successResponse, errorResponse } = require('../utils/response.utils');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { generateToken } = require('../config/jwt.config');
-const bcrypt = require('bcrypt');
 const { validatePassword } = require('../utils/validation');
 
 /**
