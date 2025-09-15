@@ -359,49 +359,39 @@ const updateStudent = async (req, res) => {
 };
 
 /**
- * @desc    Update student's own profile
+ * @desc    Update student's password only
  * @route   PUT /api/students/me
  * @access  Private (Student only)
  */
 const updateOwnProfile = async (req, res) => {
   try {
     const student = req.student; // already loaded by authorizeStudent
-    const { name, semester, division, password } = req.body;
+    const { password } = req.body;
 
-    if (name !== undefined) student.name = name.trim();
-    if (semester !== undefined) {
-      const semNum = Number(semester);
-      if (!Number.isNaN(semNum)) student.semester = semNum;
+    if (!password) {
+      return errorResponse(res, 'Password is required', 400);
     }
-    if (division !== undefined) student.division = division.trim();
 
-    if (password) {
-      const passwordError = validatePassword(password);
-      if (passwordError) {
-        return errorResponse(res, passwordError, 400);
-      }
-      const salt = await bcrypt.genSalt(10);
-      student.password = await bcrypt.hash(password, salt);
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return errorResponse(res, passwordError, 400);
     }
+
+    const salt = await bcrypt.genSalt(10);
+    student.password = await bcrypt.hash(password, salt);
 
     await student.save();
 
     return successResponse(res, {
-      message: 'Profile updated successfully',
-      student: {
-        id: student._id,
-        name: student.name,
-        enrollmentNumber: student.enrollmentNumber,
-        semester: student.semester,
-        division: student.division
-      }
+      message: 'Password updated successfully',
     });
 
   } catch (error) {
     console.error('[updateOwnProfile]', error);
-    return errorResponse(res, 'Server error while updating profile', 500);
+    return errorResponse(res, 'Server error while updating password', 500);
   }
 };
+
 
 /**
  * @desc    Delete student
