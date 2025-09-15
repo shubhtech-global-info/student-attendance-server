@@ -1,10 +1,12 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
 const studentSchema = new mongoose.Schema({
   enrollmentNumber: {
     type: String,
     required: [true, 'Enrollment number is required'],
-    trim: true
+    trim: true,
+    unique: true // ✅ Globally unique enrollment number
   },
   name: {
     type: String,
@@ -30,6 +32,10 @@ const studentSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  password: {
+    type: String,
+    required: [true, 'Password is required']
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'HOD',
@@ -37,11 +43,26 @@ const studentSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// ✅ Compound unique index: enrollmentNumber must be unique per HOD
-studentSchema.index({ enrollmentNumber: 1, createdBy: 1 }, { unique: true });
-
-// ✅ Useful indexes for queries
+// ✅ Indexes
+studentSchema.index({ enrollmentNumber: 1 }, { unique: true });
 studentSchema.index({ classIds: 1 });
+
+// ✅ Hash password before saving
+studentSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ✅ Method to compare password
+studentSchema.methods.matchPassword = async function(enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
 
 const Student = mongoose.model('Student', studentSchema);
 

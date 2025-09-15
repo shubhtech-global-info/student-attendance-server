@@ -82,10 +82,15 @@ const parseExcel = async (filePath) => {
       headerMap['div'] ||
       headerMap['section'];
 
+    const passwordHeader =
+      headerMap['password'] ||
+      headerMap['pass'] ||
+      headerMap['pwd'];
+
 
     // Debug logs — helpful while debugging header mismatches
     console.log('[parseExcel] detected headers:', headerMap);
-    console.log('[parseExcel] mapped headers =>', { enrollmentHeader, nameHeader, semesterHeader });
+    console.log('[parseExcel] mapped headers =>', { enrollmentHeader, nameHeader, semesterHeader, passwordHeader });
 
     if (!enrollmentHeader || !nameHeader || !semesterHeader) {
       console.warn('[parseExcel] required headers missing; returning []');
@@ -98,6 +103,8 @@ const parseExcel = async (filePath) => {
       const nameRaw = row[nameHeader];
       const semesterRaw = row[semesterHeader];
       const divisionRaw = row[divisionHeader];
+      const passwordRaw = row[passwordHeader];
+
 
 
       const enrollmentNumber = enrollmentRaw !== undefined && enrollmentRaw !== null
@@ -112,6 +119,11 @@ const parseExcel = async (filePath) => {
         ? String(divisionRaw).trim()
         : null;
 
+      const password = passwordRaw !== undefined && passwordRaw !== null && String(passwordRaw).trim() !== ''
+        ? String(passwordRaw).trim()
+        : null;
+
+
       // parse semester to integer
       let semester = 0;
       if (typeof semesterRaw === 'number') semester = semesterRaw;
@@ -124,7 +136,8 @@ const parseExcel = async (filePath) => {
         enrollmentNumber,
         name,
         semester,
-        division
+        division,
+        password
       };
     });
 

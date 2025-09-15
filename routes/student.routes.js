@@ -16,13 +16,13 @@ const allowHODorProfessor = (req, res, next) => {
 };
 
 // Student login with HOD authorization
-router.post('/login', authenticate, authorizeHOD, validateStudentLogin, studentController.loginStudent);
+router.post('/login', validateStudentLogin, studentController.loginStudent);
+
+// ✅ Student can update their own profile
+router.put('/me', authenticate, authorizeStudent, studentController.updateOwnProfile);
 
 // ✅ Register FCM token → students only
 router.post('/fcm-token', authenticate, authorizeStudent, studentController.registerFcmToken);
-
-// ✅ (Optional later) Remove FCM token → students only
-// router.delete('/fcm-token', authenticate, authorizeStudent, studentController.removeFcmToken);
 
 // ✅ Shared access: HOD + Professor can fetch students
 router.get('/', authenticate, allowHODorProfessor, studentController.getStudents);

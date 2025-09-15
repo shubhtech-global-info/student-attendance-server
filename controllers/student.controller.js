@@ -68,30 +68,34 @@ const removeFcmToken = async (req, res) => {
   }
 };
 
+
 /**
  * @desc    Student login
  * @route   POST /api/students/login
- * @access  Private (HOD only)
+ * @access  Student only
  */
 const loginStudent = async (req, res) => {
   try {
-    const hodId = req.user.id;
-    const { enrollmentNumber } = req.body;
+    const { enrollmentNumber, password } = req.body;
 
-    if (!enrollmentNumber) {
-      return errorResponse(res, 'Enrollment number is required', 400);
+    if (!enrollmentNumber || !password) {
+      return errorResponse(res, 'Enrollment number and password are required', 400);
     }
 
-    const student = await Student.findOne({
-      enrollmentNumber,
-      createdBy: hodId
-    });
+    // Find student by enrollment number
+    const student = await Student.findOne({ enrollmentNumber });
 
     if (!student) {
-      return errorResponse(res, 'Invalid enrollment number or access denied', 401);
+      return errorResponse(res, 'Invalid credentials', 401);
     }
 
-    // ✅ Generate token specific to student (with reference to HOD)
+    // Compare password
+    const isMatch = await bcrypt.compare(password, student.password);
+    if (!isMatch) {
+      return errorResponse(res, 'Invalid credentials', 401);
+    }
+
+    // Generate token for student
     const token = generateToken(student, 'student', student.createdBy);
 
     return successResponse(res, {
@@ -113,6 +117,7 @@ const loginStudent = async (req, res) => {
   }
 };
 
+
 /**
  * @desc    Bulk upload students from Excel
  * @route   POST /api/students/bulk-upload
@@ -127,7 +132,6 @@ const bulkUploadStudents = async (req, res) => {
     const hodId = req.user.id;
     const filePath = req.file.path;
 
-    // Parse Excel file
     const students = await parseExcel(filePath);
     if (Array.isArray(students)) console.log('[bulkUploadStudents] sample:', students.slice(0, 5));
 
@@ -135,7 +139,6 @@ const bulkUploadStudents = async (req, res) => {
       return errorResponse(res, 'No valid student data found in the Excel file', 400);
     }
 
-    // Validate student data
     const invalidStudents = students.filter(
       student => !student.enrollmentNumber || !student.name || !student.semester
     );
@@ -144,29 +147,28 @@ const bulkUploadStudents = async (req, res) => {
       return errorResponse(res, 'Some student records are missing required fields', 400);
     }
 
-    // ✅ Check for duplicate enrollment numbers per HOD
+    // ✅ Check globally unique enrollment numbers
     const existingEnrollments = await Student.find({
-      enrollmentNumber: { $in: students.map(s => s.enrollmentNumber) },
-      createdBy: hodId
+      enrollmentNumber: { $in: students.map(s => s.enrollmentNumber) }
     }).select('enrollmentNumber');
 
     const existingEnrollmentSet = new Set(existingEnrollments.map(s => s.enrollmentNumber));
 
-    // Filter out students that already exist for this HOD
     const newStudents = students.filter(s => !existingEnrollmentSet.has(s.enrollmentNumber));
 
     if (newStudents.length === 0) {
-      return errorResponse(res, 'All students in the file already exist in your account', 400);
+      return errorResponse(res, 'All students in the file already exist', 400);
     }
 
-    // Add createdBy field to each student
+    // Default password
+    const DEFAULT_PASSWORD = "password123";
+
     const studentsToInsert = newStudents.map(student => ({
       ...student,
+      password: DEFAULT_PASSWORD,
       createdBy: hodId
-      // note: classId is intentionally not set via Excel upload; assign via API
     }));
 
-    // Insert students in bulk
     const insertedStudents = await Student.insertMany(studentsToInsert);
 
     return successResponse(res, {
@@ -176,9 +178,11 @@ const bulkUploadStudents = async (req, res) => {
     }, 201);
 
   } catch (error) {
+    console.error("[bulkUploadStudents]", error);
     return errorResponse(res, 'Server error during bulk upload', 500);
   }
 };
+
 
 /**
  * @desc    Get all students
@@ -258,9 +262,8 @@ const updateStudent = async (req, res) => {
   try {
     const studentId = req.params.id;
     const hodId = req.user.id;
-    let { name, enrollmentNumber, semester, classId, division } = req.body;
+    let { name, enrollmentNumber, semester, classId, division, password } = req.body;
 
-    // Find student by ID and created by this HOD
     let student = await Student.findOne({
       _id: studentId,
       createdBy: hodId
@@ -270,20 +273,16 @@ const updateStudent = async (req, res) => {
       return errorResponse(res, 'Student not found', 404);
     }
 
-    // ✅ If enrollmentNumber is being updated, check uniqueness per HOD
     if (enrollmentNumber && enrollmentNumber !== student.enrollmentNumber) {
-      const existing = await Student.findOne({ enrollmentNumber, createdBy: hodId });
+      const existing = await Student.findOne({ enrollmentNumber });
       if (existing) {
-        return errorResponse(res, 'Student with this enrollment number already exists in your account', 400);
+        return errorResponse(res, 'Enrollment number already exists', 400);
       }
       student.enrollmentNumber = enrollmentNumber;
     }
 
-    // Handle class change logic
     if (classId) {
       let newClassIds = [];
-
-      // If classId is a single value, wrap into an array
       const ids = Array.isArray(classId) ? classId : [classId];
 
       for (const id of ids) {
@@ -297,32 +296,28 @@ const updateStudent = async (req, res) => {
         newClassIds.push(cls._id);
       }
 
-      // Remove student from old classes not in new list
       const classesToRemove = student.classIds.filter(cid => !newClassIds.includes(cid));
       await Class.updateMany(
         { _id: { $in: classesToRemove } },
         { $pull: { students: student._id } }
       );
 
-      // Add student to new classes not already present
       const classesToAdd = newClassIds.filter(cid => !student.classIds.includes(cid));
       await Class.updateMany(
         { _id: { $in: classesToAdd } },
         { $addToSet: { students: student._id } }
       );
 
-      // Finally, update student's classIds
       student.classIds = newClassIds;
     }
 
-
-    // Update other fields
     if (name) student.name = name;
     if (semester) {
       const semNum = Number(semester);
       if (!Number.isNaN(semNum)) student.semester = semNum;
     }
     if (division !== undefined) student.division = division;
+    if (password) student.password = password;
 
     await student.save();
 
@@ -332,7 +327,49 @@ const updateStudent = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("[updateStudent]", error);
     return errorResponse(res, 'Server error while updating student', 500);
+  }
+};
+
+/**
+ * @desc    Update student's own profile
+ * @route   PUT /api/students/me
+ * @access  Private (Student only)
+ */
+const updateOwnProfile = async (req, res) => {
+  try {
+    const student = req.student; // already loaded by authorizeStudent
+    const { name, semester, division, password } = req.body;
+
+    if (name !== undefined) student.name = name.trim();
+    if (semester !== undefined) {
+      const semNum = Number(semester);
+      if (!Number.isNaN(semNum)) student.semester = semNum;
+    }
+    if (division !== undefined) student.division = division.trim();
+
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      student.password = await bcrypt.hash(password, salt);
+    }
+
+    await student.save();
+
+    return successResponse(res, {
+      message: 'Profile updated successfully',
+      student: {
+        id: student._id,
+        name: student.name,
+        enrollmentNumber: student.enrollmentNumber,
+        semester: student.semester,
+        division: student.division
+      }
+    });
+
+  } catch (error) {
+    console.error('[updateOwnProfile]', error);
+    return errorResponse(res, 'Server error while updating profile', 500);
   }
 };
 
@@ -439,17 +476,16 @@ const deleteStudentsBulk = async (req, res) => {
 const addStudent = async (req, res) => {
   try {
     const hodId = req.user.id;
-    let { enrollmentNumber, name, semester, division, classId } = req.body;
+    let { enrollmentNumber, name, semester, division, classId, password } = req.body;
 
-    // Validate required fields
-    if (!enrollmentNumber || !name || !semester) {
-      return errorResponse(res, "Enrollment number, name, and semester are required", 400);
+    if (!enrollmentNumber || !name || !semester || !password) {
+      return errorResponse(res, "Enrollment number, name, semester, and password are required", 400);
     }
 
-    // ✅ Check for duplicate enrollmentNumber per HOD
-    const existing = await Student.findOne({ enrollmentNumber, createdBy: hodId });
+    // ✅ Check global uniqueness of enrollmentNumber
+    const existing = await Student.findOne({ enrollmentNumber });
     if (existing) {
-      return errorResponse(res, "Student with this enrollment number already exists in your account", 400);
+      return errorResponse(res, "Enrollment number already exists", 400);
     }
 
     let resolvedClassId = null;
@@ -460,26 +496,24 @@ const addStudent = async (req, res) => {
         if (!cls) return errorResponse(res, "Class not found", 404);
         resolvedClassId = cls._id;
       } else {
-        // treat as human class code
         const cls = await Class.findOne({ classId, createdBy: hodId }).select("_id");
         if (!cls) return errorResponse(res, "Class not found", 404);
         resolvedClassId = cls._id;
       }
     }
 
-    // Create student
     const student = new Student({
       enrollmentNumber,
       name,
       semester,
       division: division || null,
       classIds: resolvedClassId ? [resolvedClassId] : [],
+      password,
       createdBy: hodId
     });
 
     await student.save();
 
-    // If class assigned, also push student._id into Class.students
     if (resolvedClassId) {
       await Class.updateOne(
         { _id: resolvedClassId },
@@ -498,11 +532,13 @@ const addStudent = async (req, res) => {
   }
 };
 
+
 module.exports = {
   bulkUploadStudents,
   getStudents,
   getStudentById,
   updateStudent,
+  updateOwnProfile,
   deleteStudent,
   deleteStudentsBulk,
   addStudent,

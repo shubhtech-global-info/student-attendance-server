@@ -193,12 +193,20 @@ const validateHODUpdate = (req, res, next) => {
  * Validate Student for login
  */
 const validateStudentLogin = (req, res, next) => {
-  const { enrollmentNumber } = req.body;
+  const { enrollmentNumber, password } = req.body;
+
   if (!enrollmentNumber) {
     return errorResponse(res, 'Enrollment number is required', 400);
   }
+
+  if (!password) {
+    return errorResponse(res, 'Password is required', 400);
+  }
+
   next();
 };
+
+
 module.exports = {
   validateHODRegistration,
   validateOTP,
