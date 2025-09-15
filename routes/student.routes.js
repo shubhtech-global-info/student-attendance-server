@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const studentController = require('../controllers/student.controller');
-const { authenticate, authorizeHOD, authorizeStudent, protectStudent  } = require('../middleware/auth.middleware');
+const { authenticate, authorizeHOD, authorizeStudent } = require('../middleware/auth.middleware');
 const { handleExcelUpload } = require('../middleware/upload.middleware');
 const { validateStudentLogin } = require('../middleware/validation.middleware');
 
@@ -19,7 +19,7 @@ const allowHODorProfessor = (req, res, next) => {
 router.post('/login', validateStudentLogin, studentController.loginStudent);
 
 // student profile info
-router.get('/me', protectStudent, studentController.getStudentProfile );
+router.get('/me', authorizeStudent, studentController.getStudentProfile );
 
 // ✅ Student can update their own profile
 router.put('/me', authenticate, authorizeStudent, studentController.updateOwnProfile);

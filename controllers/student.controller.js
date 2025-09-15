@@ -576,21 +576,30 @@ const addStudent = async (req, res) => {
  */
 const getStudentProfile = async (req, res) => {
   try {
-    const studentId = req.student.id; // from auth middleware
-    const student = await Student.findById(studentId).select('-password'); // exclude password
+    const student = req.student; // ✅ set by authorizeStudent
 
     if (!student) {
-      return errorResponse(res, 'Student not found', 404);
+      return errorResponse(res, 'Student not authenticated', 401);
     }
 
     return successResponse(res, {
-      student
+      student: {
+        id: student._id,
+        name: student.name,
+        enrollmentNumber: student.enrollmentNumber,
+        semester: student.semester,
+        division: student.division,
+        classIds: student.classIds,
+        fcmTokens: student.fcmTokens
+      }
     });
+
   } catch (error) {
     console.error('[getStudentProfile]', error);
     return errorResponse(res, 'Server error while fetching profile', 500);
   }
 };
+
 
 
 module.exports = {

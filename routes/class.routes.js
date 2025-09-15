@@ -4,8 +4,6 @@ const classController = require('../controllers/class.controller');
 const { authenticate, authorizeHOD } = require('../middleware/auth.middleware');
 const { handleExcelUpload } = require('../middleware/upload.middleware');
 
-
-
 // Get class by ID
 router.get('/:id', classController.getClassById);
 
