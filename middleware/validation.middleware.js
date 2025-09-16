@@ -4,9 +4,9 @@ const { errorResponse } = require('../utils/response.utils');
  * Validate HOD registration data
  */
 const validateHODRegistration = (req, res, next) => {
-  const { collegeName, username, password, altPassword, email } = req.body;
+  const { collegeName, username, password, email } = req.body;
 
-  if (!collegeName || !username || !password || !altPassword || !email) {
+  if (!collegeName || !username || !password || !email) {
     return errorResponse(res, 'All fields are required', 400);
   }
 
@@ -21,10 +21,6 @@ const validateHODRegistration = (req, res, next) => {
 
   if (password.length < 6) {
     return errorResponse(res, 'Password must be at least 6 characters long', 400);
-  }
-
-  if (altPassword.length < 6) {
-    return errorResponse(res, 'Secondary password must be at least 6 characters long', 400);
   }
 
   next();
@@ -94,34 +90,6 @@ const validateLogin = (req, res, next) => {
   next();
 };
 
-/**
- * Validate login via email + altPassword
- */
-const validateEmailLogin = (req, res, next) => {
-  const email =
-    req.body && typeof req.body.email !== 'undefined'
-      ? String(req.body.email).trim()
-      : '';
-  const altPassword =
-    req.body && typeof req.body.altPassword !== 'undefined'
-      ? String(req.body.altPassword)
-      : '';
-
-  if (!email || !altPassword) {
-    return errorResponse(res, 'Email and secondary password are required', 400);
-  }
-
-  const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
-  if (!emailRegex.test(email)) {
-    return errorResponse(res, 'Please provide a valid email address', 400);
-  }
-
-  req.body.email = email;
-  req.body.altPassword = altPassword;
-
-  next();
-};
-
 const validateProfessor = (req, res, next) => {
   const { name, email, password } = req.body;
 
@@ -152,9 +120,9 @@ const validateProfessor = (req, res, next) => {
  * Validate HOD update data (partial update allowed)
  */
 const validateHODUpdate = (req, res, next) => {
-  const { collegeName, username, password, email, altPassword } = req.body;
+  const { collegeName, username, password, email } = req.body;
 
-  if (!collegeName && !username && !password && !email && !altPassword) {
+  if (!collegeName && !username && !password && !email) {
     return errorResponse(res, 'At least one field must be provided to update', 400);
   }
 
@@ -165,7 +133,6 @@ const validateHODUpdate = (req, res, next) => {
   if (collegeName) directFields.push('collegeName');
   if (email) sensitiveFields.push('email');
   if (password) sensitiveFields.push('password');
-  if (altPassword) sensitiveFields.push('altPassword');
 
   if (directFields.length > 0 && sensitiveFields.length > 0) {
     return errorResponse(
@@ -186,7 +153,7 @@ const validateHODUpdate = (req, res, next) => {
     return errorResponse(res, 'Username must be at least 3 characters long', 400);
   }
 
-  if ((password && password.length < 6) || (altPassword && altPassword.length < 6)) {
+  if (password && password.length < 6) {
     return errorResponse(res, 'Passwords must be at least 6 characters long', 400);
   }
 
@@ -249,7 +216,6 @@ module.exports = {
   validateOTP,
   validateOTPOnly,
   validateLogin,
-  validateEmailLogin, 
   validateProfessor,
   validateHODUpdate,
   validateStudentLogin,

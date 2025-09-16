@@ -11,7 +11,7 @@ const { successResponse, errorResponse } = require('../utils/response.utils');
  */
 const registerHOD = async (req, res) => {
   try {
-    const { collegeName, username, password, email, altPassword } = req.body;
+    const { collegeName, username, password, email } = req.body;
 
     // Check if HOD already exists
     const hodExists = await HOD.findOne({
@@ -33,7 +33,6 @@ const registerHOD = async (req, res) => {
       collegeName,
       username,
       password,
-      altPassword,
       email,
       verified: false,
       otp: {
@@ -217,7 +216,7 @@ const getHODProfile = async (req, res) => {
 // ================== Update HOD Profile ==================
 const updateHOD = async (req, res) => {
   try {
-    const { collegeName, username, email, password, altPassword } = req.body;
+    const { collegeName, username, email, password } = req.body;
     const hod = await HOD.findById(req.user.id);
 
     if (!hod) return errorResponse(res, 'HOD not found', 404);
@@ -234,8 +233,8 @@ const updateHOD = async (req, res) => {
     // College name update
     if (collegeName) hod.collegeName = collegeName;
 
-    // Email/Password/AltPassword update -> needs OTP
-    if ((email && email !== hod.email) || password || altPassword) {
+    // Email/Password update -> needs OTP
+    if ((email && email !== hod.email) || password) {
       const { otp, expiresAt } = generateOTP();
       hod.otp = { code: otp, expiresAt };
       hod.pendingUpdates = {};
@@ -250,10 +249,6 @@ const updateHOD = async (req, res) => {
 
       if (password) {
         hod.pendingUpdates.password = password;
-      }
-
-      if (altPassword) {
-        hod.pendingUpdates.altPassword = altPassword;
       }
 
       otpTriggered = true;
@@ -318,10 +313,6 @@ const verifyUpdateOTP = async (req, res) => {
 
     if (hod.pendingUpdates?.password) {
       hod.password = hod.pendingUpdates.password;
-    }
-
-    if (hod.pendingUpdates?.altPassword) {
-      hod.altPassword = hod.pendingUpdates.altPassword;
     }
 
     hod.otp = undefined;
@@ -409,50 +400,11 @@ const confirmDeleteHOD = async (req, res) => {
   }
 };
 
-
-/**
- * @desc    Login HOD with Email + Alt Password
- * @route   POST /api/hods/login-email
- * @access  Public
- */
-const loginHODByEmail = async (req, res) => {
-  try {
-    const { email, altPassword } = req.body;
-
-    const hod = await HOD.findOne({ email });
-    if (!hod) return errorResponse(res, 'Invalid credentials', 401);
-
-    if (!hod.verified) {
-      return errorResponse(res, 'Email not verified. Please verify your email first.', 401);
-    }
-
-    const isMatch = await hod.compareAltPassword(altPassword);
-    if (!isMatch) return errorResponse(res, 'Invalid credentials', 401);
-
-    const token = generateToken(hod, 'hod');
-
-    return successResponse(res, {
-      message: 'Login successful (email + altPassword)',
-      token,
-      hod: {
-        id: hod._id,
-        username: hod.username,
-        collegeName: hod.collegeName,
-        email: hod.email
-      }
-    });
-  } catch (error) {
-    console.error('Login HOD by Email Error:', error);
-    return errorResponse(res, 'Server error during login', 500);
-  }
-};
-
 module.exports = {
   registerHOD,
   verifyOTPHandler,
   resendOTP,
   loginHOD,
-  loginHODByEmail,
   getHODProfile,
   updateHOD,
   verifyUpdateOTP,

@@ -6,7 +6,6 @@ const {
   validateHODRegistration,
   validateOTP,          // email + otp (registration email verify)
   validateLogin,
-  validateEmailLogin,   // ✅ new
   validateHODUpdate,
   validateOTPOnly       // otp only (update verify + delete confirm)
 } = require('../middleware/validation.middleware');
@@ -18,9 +17,6 @@ router.post('/resend-otp', hodController.resendOTP);
 
 // Login via username + password
 router.post('/login', validateLogin, hodController.loginHOD);
-
-// ✅ New login route via email + altPassword
-router.post('/login-email', validateEmailLogin, hodController.loginHODByEmail);
 
 // Protected routes
 router.get('/profile', authenticate, authorizeHOD, hodController.getHODProfile);
