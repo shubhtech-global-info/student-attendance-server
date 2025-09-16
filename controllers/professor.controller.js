@@ -7,11 +7,11 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const { validatePassword } = require('../utils/validation');
 
 // -------------------------------
 // Helper: Parse Excel file for professors
 // -------------------------------
-
 const parseProfessorExcel = async (filePath) => {
   if (!fs.existsSync(filePath)) return [];
   const workbook = XLSX.readFile(filePath);
@@ -43,6 +43,7 @@ const parseProfessorExcel = async (filePath) => {
 
   return rows;
 };
+
 
 // -------------------------------
 // Bulk upload professors
@@ -95,6 +96,14 @@ const bulkUploadProfessors = async (req, res) => {
         skipped.push({ email: r.email, reason: 'duplicate in uploaded file', row: idx + 2 });
         return;
       }
+
+      // validate password for this row
+      const pwdErr = validatePassword(r.password);
+      if (pwdErr) {
+        skipped.push({ email: r.email, reason: `invalid password: ${pwdErr}`, row: idx + 2 });
+        return;
+      }
+
       seenInFile.add(emailLower);
       toInsert.push({
         name: r.name,
@@ -166,7 +175,6 @@ const bulkUploadProfessors = async (req, res) => {
 // -------------------------------
 // Bulk delete professors
 // -------------------------------
-
 const bulkDeleteProfessors = async (req, res) => {
   try {
     let professorIds = req.body?.professorIds || req.query?.professorIds;
@@ -224,6 +232,7 @@ const bulkDeleteProfessors = async (req, res) => {
   }
 };
 
+
 // -------------------------------
 // Add professor
 // -------------------------------
@@ -235,6 +244,12 @@ const addProfessor = async (req, res) => {
     const hodId = req.hod && req.hod._id;
     if (!hodId) {
       return errorResponse(res, 'HOD context missing', 400);
+    }
+
+    // validate password
+    const pwdErr = validatePassword(password);
+    if (pwdErr) {
+      return errorResponse(res, pwdErr, 400);
     }
 
     const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -269,11 +284,10 @@ const addProfessor = async (req, res) => {
 // -------------------------------
 // Get all professors
 // -------------------------------
-
 const getProfessors = async (req, res) => {
   try {
-    const hodId = req.hod._id; 
-    const professors = await Professor.find({ createdBy: hodId})
+    const hodId = req.hod._id;
+    const professors = await Professor.find({ createdBy: hodId })
       .select('-password')
       .sort({ createdAt: -1 });
 
@@ -283,10 +297,10 @@ const getProfessors = async (req, res) => {
   }
 };
 
+
 // -------------------------------
 // Get professor by ID
 // -------------------------------
-
 const getProfessorById = async (req, res) => {
   try {
     const professorId = req.params.id;
@@ -302,11 +316,10 @@ const getProfessorById = async (req, res) => {
   }
 };
 
+
 // -------------------------------
 // Update professor
 // -------------------------------
-
-
 const updateProfessor = async (req, res) => {
   try {
     const professorId = req.params.id;
@@ -352,10 +365,11 @@ const updateProfessor = async (req, res) => {
 
     // Update password if provided
     if (password) {
-      if (password.length < 6) {
-        return errorResponse(res, 'Password must be at least 6 characters long', 400);
+      const pwdErr = validatePassword(password);
+      if (pwdErr) {
+        return errorResponse(res, pwdErr, 400);
       }
-      professor.password = password; // The pre-save hook will hash this
+      professor.password = password;
     }
 
     // Save updates
@@ -376,10 +390,10 @@ const updateProfessor = async (req, res) => {
   }
 };
 
+
 // -------------------------------
 // Delete professor
 // -------------------------------
-
 const deleteProfessor = async (req, res) => {
   try {
     const professorId = req.params.id;
@@ -402,6 +416,7 @@ const deleteProfessor = async (req, res) => {
     return errorResponse(res, 'Server error while deleting professor', 500);
   }
 };
+
 
 // -------------------------------
 // Professor login
@@ -437,7 +452,6 @@ const loginProfessor = async (req, res) => {
 // -------------------------------
 // Get professor's classes
 // -------------------------------
-
 const getProfessorClasses = async (req, res) => {
   try {
     const professorId = req.user.id;

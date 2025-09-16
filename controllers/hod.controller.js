@@ -3,6 +3,7 @@ const { generateToken } = require('../config/jwt.config');
 const { generateOTP, verifyOTP } = require('../utils/otp.utils');
 const { sendOTPEmail } = require('../config/email.config');
 const { successResponse, errorResponse } = require('../utils/response.utils');
+const { validatePassword } = require('../utils/validation'); 
 
 /**
  * @desc    Register a new HOD
@@ -12,6 +13,12 @@ const { successResponse, errorResponse } = require('../utils/response.utils');
 const registerHOD = async (req, res) => {
   try {
     const { collegeName, username, password, email } = req.body;
+
+     // Validate password
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return errorResponse(res, passwordError, 400);
+    }
 
     // Check if HOD already exists
     const hodExists = await HOD.findOne({
@@ -248,6 +255,11 @@ const updateHOD = async (req, res) => {
       }
 
       if (password) {
+        // Validate password before storing
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+          return errorResponse(res, passwordError, 400);
+        }
         hod.pendingUpdates.password = password;
       }
 
