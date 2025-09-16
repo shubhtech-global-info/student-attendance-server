@@ -7,24 +7,6 @@ const { messaging } = require('../config/firebase');
 const Student = require('../models/student.model');
 
 /**
- * Verify professor access to a class.
- *  - Class must exist and belong to the same HOD (createdBy = req.user.hodId)
- *  - If class has assigned professors list, ensure membership
- */
-async function verifyProfessorAccessToClass(professorId, hodId, classId) {
-  const cls = await Class.findOne({ _id: classId, createdBy: hodId }).lean();
-  if (!cls) return { ok: false, code: 404, msg: 'Class not found' };
-
-  const profList = cls.professors || cls.assignedProfessors;
-  if (Array.isArray(profList) && profList.length > 0) {
-    const isAssigned = profList.some((p) => String(p) === String(professorId));
-    if (!isAssigned) return { ok: false, code: 403, msg: 'Not assigned to this class' };
-  }
-
-  return { ok: true };
-}
-
-/**
  * Normalize date from either dateMs (number) or date (YYYY-MM-DD).
  */
 function resolveDateMs({ dateMs, date }) {
@@ -37,6 +19,35 @@ function resolveDateMs({ dateMs, date }) {
   return null;
 }
 
+/**
+ * Verify professor access to a class.
+ *  - Class must exist (always check by _id).
+ *  - If hodId exists in token → enforce createdBy match (HOD view).
+ *  - If class has professors/assignedProfessors → ensure professor is listed.
+ */
+async function verifyProfessorAccessToClass(professorId, hodId, classId) {
+  const query = { _id: classId };
+  if (hodId) {
+    query.createdBy = hodId; // only enforce if provided
+  }
+
+  const cls = await Class.findOne(query).lean();
+  if (!cls) {
+    return { ok: false, code: 404, msg: `Class not found (id=${classId}, hodId=${hodId || "none"})` };
+  }
+
+  const profList = cls.professors || cls.assignedProfessors;
+  if (Array.isArray(profList) && profList.length > 0) {
+    const isAssigned = profList.some((p) => String(p) === String(professorId));
+    if (!isAssigned) {
+      return { ok: false, code: 403, msg: `Professor ${professorId} is not assigned to class ${classId}` };
+    }
+  }
+
+  return { ok: true, class: cls };
+}
+
+
 // ========== BULK ATTENDANCE ==========
 exports.markBulkAttendance = async (req, res, next) => {
   try {
@@ -45,19 +56,24 @@ exports.markBulkAttendance = async (req, res, next) => {
     const hodId = req.user.hodId;
 
     if (!classId || slotNumber == null || !Array.isArray(records)) {
-      return errorResponse(res, 'classId, slotNumber, and records[] are required', 400);
+      return errorResponse(res, "classId, slotNumber, and records[] are required", 400);
     }
     if (records.length === 0) {
-      return errorResponse(res, 'records[] cannot be empty', 400);
+      return errorResponse(res, "records[] cannot be empty", 400);
     }
 
     const normalizedDateMs = resolveDateMs({ dateMs, date });
     if (!normalizedDateMs) {
-      return errorResponse(res, 'Provide dateMs or date (YYYY-MM-DD)', 400);
+      return errorResponse(res, "Provide dateMs or date (YYYY-MM-DD)", 400);
     }
 
+    // 🔑 Verify access
     const access = await verifyProfessorAccessToClass(professorId, hodId, classId);
-    if (!access.ok) return errorResponse(res, access.msg, access.code);
+    if (!access.ok) {
+      console.warn(`[attendance] Access denied → ${access.msg}`);
+      return errorResponse(res, access.msg, access.code);
+    }
+    const cls = access.class;
 
     // ✅ Deduplicate by studentId (last record wins)
     const dedupedMap = new Map();
@@ -104,49 +120,46 @@ exports.markBulkAttendance = async (req, res, next) => {
 
     // =============== 🔔 Notification Part ===============
     try {
-      // 1. Get class info
-      const cls = await Class.findById(classId).lean();
       const className = cls?.className || "Class";
       const division = cls?.division ? ` (${cls.division})` : "";
 
-      // 2. Get affected students
-      const studentIds = dedupedRecords.map(r => r.studentId);
+      const studentIds = dedupedRecords.map((r) => r.studentId);
       const students = await Student.find(
         { _id: { $in: studentIds } },
         { fcmTokens: 1 }
       ).lean();
 
-      // 3. Collect all tokens
-      const tokens = students.flatMap(s =>
-        Array.isArray(s.fcmTokens) ? s.fcmTokens : []
-      ).filter(Boolean);
+      const tokens = students
+        .flatMap((s) => (Array.isArray(s.fcmTokens) ? s.fcmTokens : []))
+        .filter(Boolean);
 
       if (tokens.length > 0 && messaging) {
         const notification = {
           title: "Attendance Updated",
-          body: `Your attendance for ${className}${division}, Slot ${slotNumber} on ${new Date(normalizedDateMs).toISOString().split('T')[0]} has been marked.`,
+          body: `Your attendance for ${className}${division}, Slot ${slotNumber} on ${new Date(
+            normalizedDateMs
+          ).toISOString().split("T")[0]} has been marked.`,
         };
 
-        // chunk tokens into groups of 500
         const chunkArray = (arr, size) =>
           arr.reduce((acc, _, i) => (i % size ? acc : [...acc, arr.slice(i, i + size)]), []);
-
         const batches = chunkArray(tokens, 500);
 
         for (const [batchIndex, batch] of batches.entries()) {
           try {
             let response;
-            if (typeof messaging.sendEachForMulticast === 'function') {
+            if (typeof messaging.sendEachForMulticast === "function") {
               response = await messaging.sendEachForMulticast({ tokens: batch, notification });
-            } else if (typeof messaging.sendMulticast === 'function') {
+            } else if (typeof messaging.sendMulticast === "function") {
               response = await messaging.sendMulticast({ tokens: batch, notification });
             } else {
-              throw new Error('No supported multicast method available on messaging instance');
+              throw new Error("No supported multicast method available on messaging instance");
             }
 
-            console.log(`[attendance] Batch ${batchIndex + 1}/${batches.length}: success=${response.successCount}, failure=${response.failureCount}`);
+            console.log(
+              `[attendance] Batch ${batchIndex + 1}/${batches.length}: success=${response.successCount}, failure=${response.failureCount}`
+            );
 
-            // Handle failures (clean invalid tokens)
             const invalidTokens = [];
             if (Array.isArray(response.responses)) {
               response.responses.forEach((resp, idx) => {
@@ -172,33 +185,24 @@ exports.markBulkAttendance = async (req, res, next) => {
             }
           } catch (batchErr) {
             console.error(`[attendance] Error sending batch ${batchIndex + 1}:`, batchErr);
-            // continue with next batch
           }
         }
       }
     } catch (notifyErr) {
       console.error("FCM Notification error (outer):", notifyErr);
-      // ⚠️ Do not block attendance saving
     }
 
-
     // ✅ Final response
-    return successResponse(
-      res,
-      {
-        message: 'Attendance processed & notifications triggered',
-        savedCount: dedupedRecords.length,
-        skippedCount: skippedStudentIds.length,
-        skippedStudentIds,
-      },
-      200
-    );
+    return successResponse(res, {
+      message: "Attendance processed & notifications triggered",
+      savedCount: dedupedRecords.length,
+      skippedCount: skippedStudentIds.length,
+      skippedStudentIds,
+    });
   } catch (err) {
     next(err);
   }
 };
-
-
 
 // ========== CLASS ATTENDANCE BY DATE ==========
 exports.getAttendanceByDate = async (req, res, next) => {
@@ -406,7 +410,6 @@ exports.getMonthlySummary = async (req, res, next) => {
     next(err);
   }
 };
-
 
 
 exports.getStudentAttendanceForSelf = async (req, res, next) => {
