@@ -5,6 +5,9 @@ const Student = require('../models/student.model');
 const { errorResponse } = require('../utils/response.utils');
 const jwt = require('jsonwebtoken');
 
+// -------------------------------
+// Authenticate: Verify JWT token
+// -------------------------------
 
 const authenticate = async (req, res, next) => {
   try {
@@ -20,13 +23,17 @@ const authenticate = async (req, res, next) => {
     }
 
     const decoded = verifyToken(token);
-    req.user = decoded;
+    req.user = decoded; // attach user data (id, role, etc.) for further middleware
 
     next();
   } catch (error) {
     return errorResponse(res, 'Token is invalid or expired', 401);
   }
 };
+
+// -------------------------------
+// HOD Authorization
+// -------------------------------
 
 const authorizeHOD = async (req, res, next) => {
   try {
@@ -47,11 +54,16 @@ const authorizeHOD = async (req, res, next) => {
       return errorResponse(res, 'Email verification required', 403);
     }
 
+    req.hod = hod; // attach HOD for later use
     next();
   } catch (error) {
     return errorResponse(res, 'Authorization failed', 500);
   }
 };
+
+// -------------------------------
+// Professor Authorization
+// -------------------------------
 
 const authorizeProfessor = async (req, res, next) => {
   try {
@@ -60,11 +72,7 @@ const authorizeProfessor = async (req, res, next) => {
     }
 
     if (req.user.role !== 'professor') {
-      return errorResponse(
-        res,
-        'Access denied. Professor authorization required',
-        403
-      );
+      return errorResponse(res, 'Access denied. Professor authorization required', 403);
     }
 
     const professor = await Professor.findById(req.user.id);
@@ -72,30 +80,17 @@ const authorizeProfessor = async (req, res, next) => {
       return errorResponse(res, 'Professor not found', 404);
     }
 
-    // ✅ Extra safety: ensure professor is linked to a valid HOD
-    if (!req.user.hodId) {
-      return errorResponse(res, 'Professor must be linked to a HOD', 403);
-    }
-
-    // Extra validation
-    if (String(professor.createdBy) !== String(req.user.hodId)) {
-      return errorResponse(res, 'Professor not linked to this HOD', 403);
-    }
-
-
-    const hod = await HOD.findById(req.user.hodId);
-    if (!hod) {
-      return errorResponse(res, 'Linked HOD not found', 404);
-    }
-
-    req.professor = professor; // attach professor to req for convenience
-    req.hod = hod; // attach hod if needed later
-
+    // ✅ Since createdBy is optional, we only attach professor without enforcing link checks
+    req.professor = professor;
     next();
   } catch (error) {
     return errorResponse(res, 'Authorization failed', 500);
   }
 };
+
+// -------------------------------
+// Professor or HOD Authorization
+// -------------------------------
 
 const authorizeProfessorOrHod = async (req, res, next) => {
   try {
@@ -104,17 +99,10 @@ const authorizeProfessorOrHod = async (req, res, next) => {
     }
 
     if (req.user.role === 'professor') {
-      // same checks you already do for professors
       const professor = await Professor.findById(req.user.id);
       if (!professor) return errorResponse(res, 'Professor not found', 404);
-      if (!req.user.hodId) return errorResponse(res, 'Professor must be linked to a HOD', 403);
-      if (String(professor.createdBy) !== String(req.user.hodId)) {
-        return errorResponse(res, 'Professor not linked to this HOD', 403);
-      }
-      const hod = await HOD.findById(req.user.hodId);
-      if (!hod) return errorResponse(res, 'Linked HOD not found', 404);
+
       req.professor = professor;
-      req.hod = hod;
       return next();
     }
 
@@ -122,6 +110,7 @@ const authorizeProfessorOrHod = async (req, res, next) => {
       const hod = await HOD.findById(req.user.id);
       if (!hod) return errorResponse(res, 'HOD not found', 404);
       if (!hod.verified) return errorResponse(res, 'Email verification required', 403);
+
       req.hod = hod;
       return next();
     }
@@ -131,6 +120,10 @@ const authorizeProfessorOrHod = async (req, res, next) => {
     return errorResponse(res, 'Authorization failed', 500);
   }
 };
+
+// -------------------------------
+// Student Authorization
+// -------------------------------
 
 const authorizeStudent = async (req, res, next) => {
   try {
@@ -147,28 +140,16 @@ const authorizeStudent = async (req, res, next) => {
       return errorResponse(res, 'Student not found', 404);
     }
 
-    if (!req.user.hodId) {
-      return errorResponse(res, 'Student must be linked to a HOD', 403);
-    }
-
-    if (String(student.createdBy) !== String(req.user.hodId)) {
-      return errorResponse(res, 'Student not linked to this HOD', 403);
-    }
-
-    const hod = await HOD.findById(req.user.hodId);
-    if (!hod) {
-      return errorResponse(res, 'Linked HOD not found', 404);
-    }
-
     req.student = student;
-    req.hod = hod;
-
     next();
   } catch (error) {
     return errorResponse(res, 'Authorization failed', 500);
   }
 };
 
+// -------------------------------
+// Protect Student Route (legacy or specific use cases)
+// -------------------------------
 
 const protectStudent = async (req, res, next) => {
   let token;
@@ -195,12 +176,11 @@ const protectStudent = async (req, res, next) => {
   }
 };
 
-
 module.exports = {
   authenticate,
   authorizeHOD,
   authorizeProfessor,
   authorizeProfessorOrHod,
   authorizeStudent,
-  protectStudent 
+  protectStudent
 };

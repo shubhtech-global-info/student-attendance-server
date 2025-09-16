@@ -8,75 +8,101 @@ const {
 } = require('../middleware/auth.middleware');
 const {
   validateProfessor,
-  validateLogin
+  validateProfessorLogin
 } = require('../middleware/validation.middleware');
-const { handleExcelUpload } = require('../middleware/upload.middleware'); // MUST exist (same as classes)
+const { handleExcelUpload } = require('../middleware/upload.middleware'); // Middleware to handle file uploads
 
-// Public routes
+// --------------------
+// Public Routes
+// --------------------
+
+// ✅ Professor login route
+// Anyone with valid email and password can log in (no HOD token required)
 router.post('/login', 
-  validateLogin, 
-  professorController.loginProfessor);
+  validateProfessorLogin,         // Validate request body (email & password)
+  professorController.loginProfessor
+);
 
-  // Professor routes
+// --------------------
+// Professor-Specific Routes
+// --------------------
+
+// ✅ Get classes assigned to the logged-in professor
+// Requires valid professor authentication
 router.get(
   '/classes',
-  authenticate,
-  authorizeProfessor,
+  authenticate,           // Verify token
+  authorizeProfessor,     // Ensure role is 'professor'
   professorController.getProfessorClasses
 );
 
-// HOD routes for managing professors
-// NOTE: put bulk-upload and bulk before parameterized routes
-router.post(
-  '/bulk-upload',
-  authenticate,
-  authorizeHOD,
-  handleExcelUpload, // middleware that places file on req.file
-  professorController.bulkUploadProfessors
-);
-
-router.delete(
-  '/bulk',
-  authenticate,
-  authorizeHOD,
-  professorController.bulkDeleteProfessors
-);
-
-router.post(
-  '/',
-  authenticate,
-  authorizeHOD,
-  validateProfessor,
-  professorController.addProfessor
-);
-
-router.get(
-  '/',
-  authenticate,
-  authorizeHOD,
-  professorController.getProfessors
-);
-
+// ✅ Get a specific professor's details by ID
+// Requires authentication but no role restriction here (implement in controller if needed)
 router.get(
   '/:id',
-  authenticate,
-  authorizeHOD,
+  authenticate,           // Verify token
   professorController.getProfessorById
 );
 
+// ✅ Update a specific professor by ID
+// Requires authentication but no role restriction here (implement in controller if needed)
 router.put(
   '/:id',
-  authenticate,
-  authorizeHOD,
+  authenticate,           // Verify token
   professorController.updateProfessor
 );
 
+// --------------------
+// HOD-Managed Routes
+// --------------------
+
+// NOTE: These routes are only accessible by HODs and allow them to manage professor records
+
+// ✅ Bulk upload professors via Excel file
+// Requires HOD authentication
+router.post(
+  '/bulk-upload',
+  authenticate,           // Verify token
+  authorizeHOD,           // Ensure role is 'hod'
+  handleExcelUpload,      // Handle file upload
+  professorController.bulkUploadProfessors
+);
+
+// ✅ Bulk delete professors by criteria
+// Requires HOD authentication
+router.delete(
+  '/bulk',
+  authenticate,           // Verify token
+  authorizeHOD,           // Ensure role is 'hod'
+  professorController.bulkDeleteProfessors
+);
+
+// ✅ Add a new professor
+// Requires HOD authentication
+router.post(
+  '/',
+  authenticate,           // Verify token
+  authorizeHOD,           // Ensure role is 'hod'
+  validateProfessor,      // Validate professor details (email, name, password)
+  professorController.addProfessor
+);
+
+// ✅ Get all professors created by this HOD
+// Requires HOD authentication
+router.get(
+  '/',
+  authenticate,           // Verify token
+  authorizeHOD,           // Ensure role is 'hod'
+  professorController.getProfessors
+);
+
+// ✅ Delete a specific professor by ID
+// Requires HOD authentication
 router.delete(
   '/:id',
-  authenticate,
-  authorizeHOD,
+  authenticate,           // Verify token
+  authorizeHOD,           // Ensure role is 'hod'
   professorController.deleteProfessor
 );
 
 module.exports = router;
-

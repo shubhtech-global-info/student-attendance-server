@@ -122,23 +122,28 @@ const validateEmailLogin = (req, res, next) => {
   next();
 };
 
-/**
- * Validate professor data
- */
 const validateProfessor = (req, res, next) => {
-  const { name, username, password } = req.body;
+  const { name, email, password } = req.body;
 
-  if (!name || !username || !password) {
-    return errorResponse(res, 'Name, username, and password are required', 400);
+  // Check if all required fields are provided
+  if (!name || !email || !password) {
+    return errorResponse(res, 'Name, email, and password are required', 400);
   }
 
-  if (username.length < 3) {
-    return errorResponse(res, 'Username must be at least 3 characters long', 400);
+  // Validate email format using regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email.trim().toLowerCase())) {
+    return errorResponse(res, 'A valid email is required', 400);
   }
 
+  // Validate password length
   if (password.length < 6) {
     return errorResponse(res, 'Password must be at least 6 characters long', 400);
   }
+
+  // Optionally, you can trim and normalize the email
+  req.body.email = email.trim().toLowerCase();
+  req.body.name = name.trim();
 
   next();
 };
@@ -206,6 +211,38 @@ const validateStudentLogin = (req, res, next) => {
   next();
 };
 
+/**
+ * Validate login data (email + password)
+ */
+const validateProfessorLogin = (req, res, next) => {
+  const email =
+    req.body && typeof req.body.email !== 'undefined'
+      ? String(req.body.email).trim().toLowerCase()
+      : '';
+  const password =
+    req.body && typeof req.body.password !== 'undefined'
+      ? String(req.body.password)
+      : '';
+
+  // Simple email format check (basic regex)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!email || !emailRegex.test(email)) {
+    return errorResponse(res, 'A valid email is required', 400);
+  }
+
+  if (!password) {
+    return errorResponse(res, 'Password is required', 400);
+  }
+ 
+  req.body.email = email;
+  req.body.password = password;
+
+  next();
+};
+
+module.exports = { validateLogin };
+
 
 module.exports = {
   validateHODRegistration,
@@ -215,5 +252,9 @@ module.exports = {
   validateEmailLogin, 
   validateProfessor,
   validateHODUpdate,
-  validateStudentLogin
+  validateStudentLogin,
+  validateProfessorLogin
 };
+
+
+

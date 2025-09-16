@@ -7,11 +7,12 @@ const professorSchema = new mongoose.Schema({
     required: [true, 'Professor name is required'],
     trim: true,
   },
-  username: {
+  email: {
     type: String,
-    required: [true, 'Username is required'],
+    required: [true, 'Email is required'],
+    unique: true, // ✅ Globally unique
+    lowercase: true,
     trim: true,
-    minlength: [3, 'Username must be at least 3 characters'],
   },
   password: {
     type: String,
@@ -23,15 +24,15 @@ const professorSchema = new mongoose.Schema({
     ref: 'Class',
     default: []
   }],
-  createdBy: {
+   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'HOD',
-    required: true,
+    ref: 'HOD', // ✅ Optional reference for tracking
+    required: false, // Not required for authentication
   },
 }, { timestamps: true });
 
-// ✅ Ensure username is unique per HOD
-professorSchema.index({ username: 1, createdBy: 1 }, { unique: true });
+// ✅ Ensure email is unique globally
+professorSchema.index({ email: 1 }, { unique: true });
 
 // 🔑 Hash password before saving
 professorSchema.pre('save', async function (next) {
@@ -49,11 +50,6 @@ professorSchema.pre('save', async function (next) {
 // 🔍 Compare password
 professorSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
-};
-
-// 🔍 Find professor by username + HOD
-professorSchema.statics.findByUsernameAndHod = function (username, hodId) {
-  return this.findOne({ username: username.toLowerCase(), createdBy: hodId });
 };
 
 const Professor = mongoose.model('Professor', professorSchema);
