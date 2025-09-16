@@ -27,7 +27,7 @@ const professorSchema = new mongoose.Schema({
    createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'HOD', // ✅ Optional reference for tracking
-    required: false, // Not required for authentication
+    required: true, // Not required for authentication
   },
 }, { timestamps: true });
 

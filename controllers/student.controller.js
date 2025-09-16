@@ -159,7 +159,7 @@ const bulkUploadStudents = async (req, res) => {
       return errorResponse(res, 'All students in the file already exist', 400);
     }
 
-    const DEFAULT_PASSWORD = "password123";
+    const DEFAULT_PASSWORD = "Temp@1234";
     const salt = await bcrypt.genSalt(10);
 
     // ✅ Hash passwords before inserting, validate if provided

@@ -47,11 +47,15 @@ const parseProfessorExcel = async (filePath) => {
 // -------------------------------
 // Bulk upload professors
 // -------------------------------
-
 const bulkUploadProfessors = async (req, res) => {
   let filePath;
   try {
     if (!req.file) return errorResponse(res, 'Please upload an Excel file', 400);
+
+    const hodId = req.hod && req.hod._id;
+    if (!hodId) {
+      return errorResponse(res, 'HOD context missing', 400);
+    }
 
     filePath = req.file.path;
     const rows = await parseProfessorExcel(filePath);
@@ -59,7 +63,7 @@ const bulkUploadProfessors = async (req, res) => {
 
     const normalizedRows = rows.map(r => ({
       name: r.name,
-      email: r.email,
+      email: String(r.email || '').trim().toLowerCase(),
       password: r.password || 'Temp@1234'
     })).filter(r => r.name && r.email);
 
@@ -73,7 +77,7 @@ const bulkUploadProfessors = async (req, res) => {
       });
     }
 
-    // Get all existing emails
+    // Get all existing emails (global)
     const existing = await Professor.find({}).select('email');
     const existingSet = new Set(existing.map(e => String(e.email).toLowerCase()));
 
@@ -94,8 +98,9 @@ const bulkUploadProfessors = async (req, res) => {
       seenInFile.add(emailLower);
       toInsert.push({
         name: r.name,
-        email: r.email,
-        password: r.password
+        email: emailLower,
+        password: r.password,
+        createdBy: hodId
       });
     });
 
@@ -116,7 +121,8 @@ const bulkUploadProfessors = async (req, res) => {
         const prof = await Professor.create({
           name: doc.name,
           email: doc.email,
-          password: doc.password
+          password: doc.password,
+          createdBy: doc.createdBy
         });
 
         inserted.push({
@@ -155,6 +161,7 @@ const bulkUploadProfessors = async (req, res) => {
     } catch (e) { }
   }
 };
+
 
 // -------------------------------
 // Bulk delete professors
@@ -220,20 +227,27 @@ const bulkDeleteProfessors = async (req, res) => {
 // -------------------------------
 // Add professor
 // -------------------------------
-
 const addProfessor = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    const professorExists = await Professor.findOne({ email: email.toLowerCase() });
+    // ensure we have HOD context
+    const hodId = req.hod && req.hod._id;
+    if (!hodId) {
+      return errorResponse(res, 'HOD context missing', 400);
+    }
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const professorExists = await Professor.findOne({ email: normalizedEmail });
     if (professorExists) {
       return errorResponse(res, 'Email already taken', 400);
     }
 
     const professor = await Professor.create({
       name,
-      email: email.toLowerCase(),
-      password
+      email: normalizedEmail,
+      password,
+      createdBy: hodId
     });
 
     return successResponse(res, {
@@ -246,9 +260,11 @@ const addProfessor = async (req, res) => {
     }, 201);
 
   } catch (error) {
+    console.error('addProfessor error:', error);
     return errorResponse(res, 'Server error while adding professor', 500);
   }
 };
+
 
 // -------------------------------
 // Get all professors
@@ -256,7 +272,8 @@ const addProfessor = async (req, res) => {
 
 const getProfessors = async (req, res) => {
   try {
-    const professors = await Professor.find()
+    const hodId = req.hod._id; 
+    const professors = await Professor.find({ createdBy: hodId})
       .select('-password')
       .sort({ createdAt: -1 });
 
@@ -289,9 +306,7 @@ const getProfessorById = async (req, res) => {
 // Update professor
 // -------------------------------
 
-/**
- * Update a specific professor by ID
- */
+
 const updateProfessor = async (req, res) => {
   try {
     const professorId = req.params.id;
