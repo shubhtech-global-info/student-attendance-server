@@ -36,8 +36,14 @@ const sendEmail = async (options) => {
     console.log(`Email sent: ${info.messageId}`);
     return info;
   } catch (error) {
-    console.error('Error sending email:', error);
-    throw new Error('Email could not be sent');
+    console.error("SMTP ERROR DETAILS 👉", {
+      message: error.message,
+      code: error.code,
+      response: error.response,
+      stack: error.stack,
+    });
+
+    throw error;
   }
 };
 
