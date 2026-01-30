@@ -1,58 +1,58 @@
-const nodemailer = require('nodemailer');
-
-// Create reusable transporter object using SMTP transport
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 20000,
-  socketTimeout: 20000,
-});
+const axios = require('axios');
 
 /**
- * Send email
+ * Send email via Brevo API
  * @param {Object} options - Email options
  * @param {String} options.to - Recipient email
  * @param {String} options.subject - Email subject
- * @param {String} options.text - Plain text content
- * @param {String} options.html - HTML content
- * @returns {Promise} - Nodemailer info object
+ * @param {String} options.text - Plain text content (optional)
+ * @param {String} options.html - HTML content (optional)
+ * @returns {Promise} - API response
  */
 const sendEmail = async (options) => {
   try {
-    const mailOptions = {
-      from: process.env.EMAIL_FROM,
-      to: options.to,
+    const payload = {
+      sender: {
+        name: 'Student Attendance System',
+        email: process.env.EMAIL_FROM, // your Brevo sender email
+      },
+      to: [
+        { email: options.to }
+      ],
       subject: options.subject,
-      text: options.text || '',
-      html: options.html || ''
+      textContent: options.text || '',
+      htmlContent: options.html || ''
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Email sent: ${info.messageId}`);
-    return info;
-  } catch (error) {
-    console.error("SMTP ERROR DETAILS 👉", {
-      message: error.message,
-      code: error.code,
-      response: error.response,
-      stack: error.stack,
-    });
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      payload,
+      {
+        headers: {
+          'api-key': process.env.BREVO_API_KEY, // your Brevo API key
+          'Content-Type': 'application/json'
+        },
+        timeout: 20000
+      }
+    );
 
-    throw error;
+    console.log('Email sent via Brevo API:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Brevo API ERROR 👉", {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack
+    });
+    throw new Error('Email could not be sent');
   }
 };
 
 /**
- * Send OTP email
+ * Send OTP email via Brevo API
  * @param {String} email - Recipient email
  * @param {String} otp - One-time password
  * @param {String} name - Recipient name
- * @returns {Promise} - Nodemailer info object
  */
 const sendOTPEmail = async (email, otp, name = '') => {
   const subject = 'Your OTP for Student Attendance System';
