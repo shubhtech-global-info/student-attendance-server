@@ -42,7 +42,7 @@ app.use('/api/attendance', attendanceRoutes);
 
 // Root route
 app.get('/', (req, res) => {
-  res.send('✅ Student Attendance System API is running');
+  res.send('Student Attendance System API is running....');
 });
 
 // Error handling middleware
