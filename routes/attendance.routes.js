@@ -14,5 +14,6 @@ router.get('/student/:studentId', authenticate, authorizeProfessorOrHod, attenda
 router.get('/class/:classId', authenticate, authorizeProfessorOrHod, attendanceController.getClassAttendance);
 router.get('/:classId', authenticate, authorizeProfessorOrHod, attendanceController.getAttendanceByDate);
 router.get('/summary/:classId', authenticate, authorizeProfessorOrHod, attendanceController.getMonthlySummary);
+router.get('/class/:classId/student/:studentId',  authenticate,  authorizeProfessorOrHod,  attendanceController.getStudentAttendanceForClass);
 
 module.exports = router;

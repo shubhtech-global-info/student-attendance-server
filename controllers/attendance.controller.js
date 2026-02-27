@@ -453,3 +453,53 @@ exports.getStudentAttendanceForSelf = async (req, res, next) => {
   }
 };
 
+exports.getStudentAttendanceForClass = async (req, res, next) => {
+  try {
+    const { classId, studentId } = req.params;
+    let { month, year } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(classId) ||
+        !mongoose.Types.ObjectId.isValid(studentId)) {
+      return errorResponse(res, "Invalid classId or studentId", 400);
+    }
+
+    const filter = {
+      classId,
+      studentId
+    };
+
+    if (month && year) {
+      month = Number(month);
+      year = Number(year);
+
+      if (!Number.isInteger(month) || !Number.isInteger(year) ||
+          month < 1 || month > 12) {
+        return errorResponse(res, "Invalid month/year", 400);
+      }
+
+      const start = new Date(year, month - 1, 1).getTime();
+      const end = new Date(year, month, 0, 23, 59, 59, 999).getTime();
+
+      filter.dateMs = { $gte: start, $lte: end };
+    }
+
+    const records = await Attendance.find(filter)
+      .populate("markedBy", "name username")
+      .lean();
+
+    const cleaned = records.map(r => ({
+      id: String(r._id),
+      classId: String(r.classId),
+      studentId: String(r.studentId),
+      date: new Date(r.dateMs).toISOString(),
+      slotNumber: r.slotNumber,
+      isPresent: !!r.isPresent,
+      markedBy: r.markedBy?.name || r.markedBy?.username || ""
+    }));
+
+    return successResponse(res, { records: cleaned });
+
+  } catch (err) {
+    next(err);
+  }
+};

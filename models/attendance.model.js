@@ -54,6 +54,12 @@ attendanceSchema.index(
   { unique: true }
 );
 
+attendanceSchema.index({
+  classId: 1,
+  studentId: 1,
+  dateMs: 1
+});
+
 // Helpful query indexes
 attendanceSchema.index({ classId: 1, dateMs: 1, slotNumber: 1 });
 attendanceSchema.index({ studentId: 1, dateMs: 1 });
