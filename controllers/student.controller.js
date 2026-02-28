@@ -565,7 +565,12 @@ const addStudent = async (req, res) => {
  */
 const getStudentProfile = async (req, res) => {
   try {
-    const student = req.student; // ✅ set by authorizeStudent
+    const student = await Student.findById(req.student._id)
+      .populate({
+        path: 'classIds',
+        select: 'classId className division'
+      })
+      .lean();
 
     if (!student) {
       return errorResponse(res, 'Student not authenticated', 401);
@@ -578,8 +583,7 @@ const getStudentProfile = async (req, res) => {
         enrollmentNumber: student.enrollmentNumber,
         semester: student.semester,
         division: student.division,
-        classIds: student.classIds,
-        fcmTokens: student.fcmTokens
+        classes: student.classIds, // now populated
       }
     });
 

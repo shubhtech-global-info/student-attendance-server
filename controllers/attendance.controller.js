@@ -327,7 +327,6 @@ exports.getStudentAttendance = async (req, res, next) => {
   }
 };
 
-
 // ========== MONTHLY SUMMARY ==========
 exports.getMonthlySummary = async (req, res, next) => {
   try {
