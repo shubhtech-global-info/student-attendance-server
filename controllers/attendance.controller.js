@@ -550,7 +550,7 @@ exports.getMyAttendanceForClass = async (req, res, next) => {
       markedBy: r.markedBy?.name || r.markedBy?.username || "",
     }));
 
-    return successResponse(res, { records });
+    return successResponse(res, { records: cleaned });
   } catch (err) {
     next(err);
   }
