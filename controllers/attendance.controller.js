@@ -544,6 +544,7 @@ exports.getMyAttendanceForClass = async (req, res, next) => {
     const cleaned = records.map((r) => ({
       id: String(r._id),
       classId: String(r.classId),
+      studentId: String(r.studentId),
       date: new Date(r.dateMs).toISOString(),
       slotNumber: r.slotNumber,
       isPresent: !!r.isPresent,
