@@ -1,13 +1,14 @@
 // controllers/student.controller.js
-const mongoose = require('mongoose');
-const Student = require('../models/student.model');
-const Class = require('../models/class.model');
-const { parseExcel } = require('../utils/excel.utils');
-const { successResponse, errorResponse } = require('../utils/response.utils');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { generateToken } = require('../config/jwt.config');
-const { validatePassword } = require('../utils/validation');
+const mongoose = require("mongoose");
+const Student = require("../models/student.model");
+const Class = require("../models/class.model");
+const { parseExcel } = require("../utils/excel.utils");
+const { successResponse, errorResponse } = require("../utils/response.utils");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { generateToken } = require("../config/jwt.config");
+const { validatePassword } = require("../utils/validation");
+const Attendance = require("../models/attendance.model");
 
 /**
  * @desc    Register FCM token for student
@@ -20,7 +21,7 @@ const registerFcmToken = async (req, res) => {
     let { fcmToken } = req.body;
 
     if (!fcmToken) {
-      return errorResponse(res, 'fcmToken is required', 400);
+      return errorResponse(res, "fcmToken is required", 400);
     }
 
     // 🔑 Decode URL-encoded token (fixes %3A issue)
@@ -30,16 +31,15 @@ const registerFcmToken = async (req, res) => {
     await Student.findByIdAndUpdate(
       studentId,
       { $addToSet: { fcmTokens: fcmToken } }, // ensures uniqueness
-      { new: true }
+      { new: true },
     );
 
     return successResponse(res, {
-      message: 'FCM token registered successfully'
+      message: "FCM token registered successfully",
     });
-
   } catch (error) {
-    console.error('[registerFcmToken]', error);
-    return errorResponse(res, 'Server error while registering FCM token', 500);
+    console.error("[registerFcmToken]", error);
+    return errorResponse(res, "Server error while registering FCM token", 500);
   }
 };
 
@@ -56,16 +56,15 @@ const removeFcmToken = async (req, res) => {
     await Student.findByIdAndUpdate(
       studentId,
       { $pull: { fcmTokens: req.body.fcmToken } },
-      { new: true }
+      { new: true },
     );
 
     return successResponse(res, {
-      message: 'FCM token removed successfully'
+      message: "FCM token removed successfully",
     });
-
   } catch (error) {
-    console.error('[removeFcmToken]', error);
-    return errorResponse(res, 'Server error while removing FCM token', 500);
+    console.error("[removeFcmToken]", error);
+    return errorResponse(res, "Server error while removing FCM token", 500);
   }
 };
 
@@ -79,27 +78,31 @@ const loginStudent = async (req, res) => {
     const { enrollmentNumber, password } = req.body;
 
     if (!enrollmentNumber || !password) {
-      return errorResponse(res, 'Enrollment number and password are required', 400);
+      return errorResponse(
+        res,
+        "Enrollment number and password are required",
+        400,
+      );
     }
 
     // Find student by enrollment number
     const student = await Student.findOne({ enrollmentNumber });
 
     if (!student) {
-      return errorResponse(res, 'Invalid credentials', 401);
+      return errorResponse(res, "Invalid credentials", 401);
     }
 
     // Compare password
     const isMatch = await bcrypt.compare(password, student.password);
     if (!isMatch) {
-      return errorResponse(res, 'Invalid credentials', 401);
+      return errorResponse(res, "Invalid credentials", 401);
     }
 
     // Generate token for student
-    const token = generateToken(student, 'student', student.createdBy);
+    const token = generateToken(student, "student", student.createdBy);
 
     return successResponse(res, {
-      message: 'Student logged in successfully',
+      message: "Student logged in successfully",
       token,
       student: {
         id: student._id,
@@ -107,13 +110,12 @@ const loginStudent = async (req, res) => {
         enrollmentNumber: student.enrollmentNumber,
         semester: student.semester,
         division: student.division,
-        classIds: student.classIds
-      }
+        classIds: student.classIds,
+      },
     });
-
   } catch (error) {
-    console.error('[loginStudent]', error);
-    return errorResponse(res, 'Server error during student login', 500);
+    console.error("[loginStudent]", error);
+    return errorResponse(res, "Server error during student login", 500);
   }
 };
 
@@ -125,80 +127,101 @@ const loginStudent = async (req, res) => {
 const bulkUploadStudents = async (req, res) => {
   try {
     if (!req.file) {
-      return errorResponse(res, 'Please upload an Excel file', 400);
+      return errorResponse(res, "Please upload an Excel file", 400);
     }
 
     const hodId = req.user.id;
     const filePath = req.file.path;
 
     const students = await parseExcel(filePath);
-    if (Array.isArray(students)) console.log('[bulkUploadStudents] sample:', students.slice(0, 5));
+    if (Array.isArray(students))
+      console.log("[bulkUploadStudents] sample:", students.slice(0, 5));
 
     if (!students || students.length === 0) {
-      return errorResponse(res, 'No valid student data found in the Excel file', 400);
+      return errorResponse(
+        res,
+        "No valid student data found in the Excel file",
+        400,
+      );
     }
 
     const invalidStudents = students.filter(
-      student => !student.enrollmentNumber || !student.name || !student.semester
+      (student) =>
+        !student.enrollmentNumber || !student.name || !student.semester,
     );
 
     if (invalidStudents.length > 0) {
-      return errorResponse(res, 'Some student records are missing required fields', 400);
+      return errorResponse(
+        res,
+        "Some student records are missing required fields",
+        400,
+      );
     }
 
     // ✅ Check globally unique enrollment numbers
     const existingEnrollments = await Student.find({
-      enrollmentNumber: { $in: students.map(s => s.enrollmentNumber) }
-    }).select('enrollmentNumber');
+      enrollmentNumber: { $in: students.map((s) => s.enrollmentNumber) },
+    }).select("enrollmentNumber");
 
-    const existingEnrollmentSet = new Set(existingEnrollments.map(s => s.enrollmentNumber));
+    const existingEnrollmentSet = new Set(
+      existingEnrollments.map((s) => s.enrollmentNumber),
+    );
 
-    const newStudents = students.filter(s => !existingEnrollmentSet.has(s.enrollmentNumber));
+    const newStudents = students.filter(
+      (s) => !existingEnrollmentSet.has(s.enrollmentNumber),
+    );
 
     if (newStudents.length === 0) {
-      return errorResponse(res, 'All students in the file already exist', 400);
+      return errorResponse(res, "All students in the file already exist", 400);
     }
 
     const DEFAULT_PASSWORD = "Temp@1234";
     const salt = await bcrypt.genSalt(10);
 
     // ✅ Hash passwords before inserting, validate if provided
-    const studentsToInsert = await Promise.all(newStudents.map(async student => {
-      let plainPassword = student.password || DEFAULT_PASSWORD;
+    const studentsToInsert = await Promise.all(
+      newStudents.map(async (student) => {
+        let plainPassword = student.password || DEFAULT_PASSWORD;
 
-      if (student.password) {
-        const passwordError = validatePassword(plainPassword);
-        if (passwordError) {
-          console.warn(`[bulkUploadStudents] Weak password for ${student.enrollmentNumber}: ${passwordError}`);
-          // Optionally, you can skip this student or proceed with default password
-          plainPassword = DEFAULT_PASSWORD;
+        if (student.password) {
+          const passwordError = validatePassword(plainPassword);
+          if (passwordError) {
+            console.warn(
+              `[bulkUploadStudents] Weak password for ${student.enrollmentNumber}: ${passwordError}`,
+            );
+            // Optionally, you can skip this student or proceed with default password
+            plainPassword = DEFAULT_PASSWORD;
+          }
         }
-      }
 
-      const hashedPassword = await bcrypt.hash(plainPassword, salt);
-      return {
-        enrollmentNumber: student.enrollmentNumber,
-        name: student.name,
-        semester: student.semester,
-        division: student.division || null,
-        classIds: [],
-        fcmTokens: [],
-        password: hashedPassword,
-        createdBy: hodId
-      };
-    }));
+        const hashedPassword = await bcrypt.hash(plainPassword, salt);
+        return {
+          enrollmentNumber: student.enrollmentNumber,
+          name: student.name,
+          semester: student.semester,
+          division: student.division || null,
+          classIds: [],
+          fcmTokens: [],
+          password: hashedPassword,
+          createdBy: hodId,
+        };
+      }),
+    );
 
     const insertedStudents = await Student.insertMany(studentsToInsert);
 
-    return successResponse(res, {
-      message: `${insertedStudents.length} students uploaded successfully`,
-      totalUploaded: insertedStudents.length,
-      totalSkipped: students.length - newStudents.length
-    }, 201);
-
+    return successResponse(
+      res,
+      {
+        message: `${insertedStudents.length} students uploaded successfully`,
+        totalUploaded: insertedStudents.length,
+        totalSkipped: students.length - newStudents.length,
+      },
+      201,
+    );
   } catch (error) {
     console.error("[bulkUploadStudents]", error);
-    return errorResponse(res, 'Server error during bulk upload', 500);
+    return errorResponse(res, "Server error during bulk upload", 500);
   }
 };
 
@@ -225,7 +248,10 @@ const getStudents = async (req, res) => {
       if (mongoose.Types.ObjectId.isValid(classId)) {
         query.classIds = classId;
       } else {
-        const cls = await Class.findOne({ classId: classId, createdBy: hodId }).select('_id');
+        const cls = await Class.findOne({
+          classId: classId,
+          createdBy: hodId,
+        }).select("_id");
         if (cls) {
           query.classIds = cls._id;
         } else {
@@ -238,9 +264,8 @@ const getStudents = async (req, res) => {
     const students = await Student.find(query).sort({ enrollmentNumber: 1 });
 
     return successResponse(res, { students });
-
   } catch (error) {
-    return errorResponse(res, 'Server error while fetching students', 500);
+    return errorResponse(res, "Server error while fetching students", 500);
   }
 };
 
@@ -257,17 +282,16 @@ const getStudentById = async (req, res) => {
     // Find student by ID and created by this HOD
     const student = await Student.findOne({
       _id: studentId,
-      createdBy: hodId
+      createdBy: hodId,
     });
 
     if (!student) {
-      return errorResponse(res, 'Student not found', 404);
+      return errorResponse(res, "Student not found", 404);
     }
 
     return successResponse(res, { student });
-
   } catch (error) {
-    return errorResponse(res, 'Server error while fetching student', 500);
+    return errorResponse(res, "Server error while fetching student", 500);
   }
 };
 
@@ -280,21 +304,22 @@ const updateStudent = async (req, res) => {
   try {
     const studentId = req.params.id;
     const hodId = req.user.id;
-    let { name, enrollmentNumber, semester, classId, division, password } = req.body;
+    let { name, enrollmentNumber, semester, classId, division, password } =
+      req.body;
 
     let student = await Student.findOne({
       _id: studentId,
-      createdBy: hodId
+      createdBy: hodId,
     });
 
     if (!student) {
-      return errorResponse(res, 'Student not found', 404);
+      return errorResponse(res, "Student not found", 404);
     }
 
     if (enrollmentNumber && enrollmentNumber !== student.enrollmentNumber) {
       const existing = await Student.findOne({ enrollmentNumber });
       if (existing) {
-        return errorResponse(res, 'Enrollment number already exists', 400);
+        return errorResponse(res, "Enrollment number already exists", 400);
       }
       student.enrollmentNumber = enrollmentNumber;
     }
@@ -314,24 +339,32 @@ const updateStudent = async (req, res) => {
       for (const id of ids) {
         let cls = null;
         if (mongoose.Types.ObjectId.isValid(id)) {
-          cls = await Class.findOne({ _id: id, createdBy: hodId }).select('_id');
+          cls = await Class.findOne({ _id: id, createdBy: hodId }).select(
+            "_id",
+          );
         } else {
-          cls = await Class.findOne({ classId: id, createdBy: hodId }).select('_id');
+          cls = await Class.findOne({ classId: id, createdBy: hodId }).select(
+            "_id",
+          );
         }
         if (!cls) return errorResponse(res, `Class not found: ${id}`, 404);
         newClassIds.push(cls._id);
       }
 
-      const classesToRemove = student.classIds.filter(cid => !newClassIds.includes(cid));
+      const classesToRemove = student.classIds.filter(
+        (cid) => !newClassIds.includes(cid),
+      );
       await Class.updateMany(
         { _id: { $in: classesToRemove } },
-        { $pull: { students: student._id } }
+        { $pull: { students: student._id } },
       );
 
-      const classesToAdd = newClassIds.filter(cid => !student.classIds.includes(cid));
+      const classesToAdd = newClassIds.filter(
+        (cid) => !student.classIds.includes(cid),
+      );
       await Class.updateMany(
         { _id: { $in: classesToAdd } },
-        { $addToSet: { students: student._id } }
+        { $addToSet: { students: student._id } },
       );
 
       student.classIds = newClassIds;
@@ -348,13 +381,12 @@ const updateStudent = async (req, res) => {
     await student.save();
 
     return successResponse(res, {
-      message: 'Student updated successfully',
-      student
+      message: "Student updated successfully",
+      student,
     });
-
   } catch (error) {
     console.error("[updateStudent]", error);
-    return errorResponse(res, 'Server error while updating student', 500);
+    return errorResponse(res, "Server error while updating student", 500);
   }
 };
 
@@ -369,7 +401,7 @@ const updateOwnProfile = async (req, res) => {
     const { password } = req.body;
 
     if (!password) {
-      return errorResponse(res, 'Password is required', 400);
+      return errorResponse(res, "Password is required", 400);
     }
 
     const passwordError = validatePassword(password);
@@ -382,15 +414,13 @@ const updateOwnProfile = async (req, res) => {
     await student.save();
 
     return successResponse(res, {
-      message: 'Password updated successfully',
+      message: "Password updated successfully",
     });
-
   } catch (error) {
-    console.error('[updateOwnProfile]', error);
-    return errorResponse(res, 'Server error while updating password', 500);
+    console.error("[updateOwnProfile]", error);
+    return errorResponse(res, "Server error while updating password", 500);
   }
 };
-
 
 /**
  * @desc    Delete student
@@ -405,30 +435,31 @@ const deleteStudent = async (req, res) => {
     // Find student by ID and created by this HOD
     const student = await Student.findOne({
       _id: studentId,
-      createdBy: hodId
+      createdBy: hodId,
     });
 
     if (!student) {
-      return errorResponse(res, 'Student not found', 404);
+      return errorResponse(res, "Student not found", 404);
     }
 
     if (student.classIds && student.classIds.length > 0) {
       await Class.updateMany(
         { _id: { $in: student.classIds } },
-        { $pull: { students: student._id } }
+        { $pull: { students: student._id } },
       );
     }
 
+    // Delete attendance records of this student
+    await Attendance.deleteMany({ studentId: student._id });
 
     // Delete student
     await student.deleteOne();
 
     return successResponse(res, {
-      message: 'Student deleted successfully'
+      message: "Student deleted successfully",
     });
-
   } catch (error) {
-    return errorResponse(res, 'Server error while deleting student', 500);
+    return errorResponse(res, "Server error while deleting student", 500);
   }
 };
 
@@ -450,7 +481,7 @@ const deleteStudentsBulk = async (req, res) => {
     // Find students belonging to this HOD
     const students = await Student.find({
       _id: { $in: studentIds },
-      createdBy: hodId
+      createdBy: hodId,
     });
 
     if (students.length === 0) {
@@ -460,26 +491,28 @@ const deleteStudentsBulk = async (req, res) => {
     // Remove student refs from their classes
     const classUpdates = [];
 
-    students.forEach(s => {
+    students.forEach((s) => {
       if (s.classIds && s.classIds.length > 0) {
         classUpdates.push(
-          Class.updateMany({ _id: { $in: s.classIds } }, { $pull: { students: s._id } })
+          Class.updateMany(
+            { _id: { $in: s.classIds } },
+            { $pull: { students: s._id } },
+          ),
         );
       }
     });
-
 
     await Promise.all(classUpdates);
 
     // Delete students in one go
     const result = await Student.deleteMany({
       _id: { $in: studentIds },
-      createdBy: hodId
+      createdBy: hodId,
     });
 
     return successResponse(res, {
       message: `${result.deletedCount} students deleted successfully`,
-      deletedCount: result.deletedCount
+      deletedCount: result.deletedCount,
     });
   } catch (error) {
     console.error("[deleteStudentsBulk]", error);
@@ -495,10 +528,15 @@ const deleteStudentsBulk = async (req, res) => {
 const addStudent = async (req, res) => {
   try {
     const hodId = req.user.id;
-    let { enrollmentNumber, name, semester, division, classId, password } = req.body;
+    let { enrollmentNumber, name, semester, division, classId, password } =
+      req.body;
 
     if (!enrollmentNumber || !name || !semester || !password) {
-      return errorResponse(res, "Enrollment number, name, semester, and password are required", 400);
+      return errorResponse(
+        res,
+        "Enrollment number, name, semester, and password are required",
+        400,
+      );
     }
 
     // ✅ Validate password strength
@@ -517,11 +555,16 @@ const addStudent = async (req, res) => {
 
     if (classId) {
       if (mongoose.Types.ObjectId.isValid(classId)) {
-        const cls = await Class.findOne({ _id: classId, createdBy: hodId }).select("_id");
+        const cls = await Class.findOne({
+          _id: classId,
+          createdBy: hodId,
+        }).select("_id");
         if (!cls) return errorResponse(res, "Class not found", 404);
         resolvedClassId = cls._id;
       } else {
-        const cls = await Class.findOne({ classId, createdBy: hodId }).select("_id");
+        const cls = await Class.findOne({ classId, createdBy: hodId }).select(
+          "_id",
+        );
         if (!cls) return errorResponse(res, "Class not found", 404);
         resolvedClassId = cls._id;
       }
@@ -534,7 +577,7 @@ const addStudent = async (req, res) => {
       division: division || null,
       classIds: resolvedClassId ? [resolvedClassId] : [],
       password,
-      createdBy: hodId
+      createdBy: hodId,
     });
 
     await student.save();
@@ -542,21 +585,23 @@ const addStudent = async (req, res) => {
     if (resolvedClassId) {
       await Class.updateOne(
         { _id: resolvedClassId },
-        { $addToSet: { students: student._id } }
+        { $addToSet: { students: student._id } },
       );
     }
 
-    return successResponse(res, {
-      message: "Student added successfully",
-      student
-    }, 201);
-
+    return successResponse(
+      res,
+      {
+        message: "Student added successfully",
+        student,
+      },
+      201,
+    );
   } catch (error) {
     console.error("[addStudent]", error);
     return errorResponse(res, "Server error while adding student", 500);
   }
 };
-
 
 /**
  * @desc    Get logged-in student details
@@ -567,13 +612,13 @@ const getStudentProfile = async (req, res) => {
   try {
     const student = await Student.findById(req.student._id)
       .populate({
-        path: 'classIds',
-        select: 'classId className division'
+        path: "classIds",
+        select: "classId className division",
       })
       .lean();
 
     if (!student) {
-      return errorResponse(res, 'Student not authenticated', 401);
+      return errorResponse(res, "Student not authenticated", 401);
     }
 
     return successResponse(res, {
@@ -584,16 +629,13 @@ const getStudentProfile = async (req, res) => {
         semester: student.semester,
         division: student.division,
         classes: student.classIds, // now populated
-      }
+      },
     });
-
   } catch (error) {
-    console.error('[getStudentProfile]', error);
-    return errorResponse(res, 'Server error while fetching profile', 500);
+    console.error("[getStudentProfile]", error);
+    return errorResponse(res, "Server error while fetching profile", 500);
   }
 };
-
-
 
 module.exports = {
   bulkUploadStudents,
@@ -607,5 +649,5 @@ module.exports = {
   loginStudent,
   registerFcmToken,
   removeFcmToken,
-  getStudentProfile
+  getStudentProfile,
 };
